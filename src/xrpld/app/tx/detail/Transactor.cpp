@@ -627,8 +627,7 @@ Transactor::checkSign(PreclaimContext const& ctx)
         return terNO_ACCOUNT;
 
     if (ctx.view.rules().enabled(featureQuantum) &&
-        sleAccount->isFlag(lsfForceQuantum) &&
-        ctx.view.exists(keylet::quantum(idSigner, makeSlice(pkSigner))) &&
+        sleAccount->isFlag(lsfForceQuantum) && !pkSigner.empty() &&
         pubKey.size() != DILITHIUM_PK_SIZE)
         return telBAD_PUBLIC_KEY;
 
@@ -673,6 +672,11 @@ Transactor::checkBatchSign(PreclaimContext const& ctx)
 
                 return tesSUCCESS;
             }
+
+            if (ctx.view.rules().enabled(featureQuantum) &&
+                sleAccount->isFlag(lsfForceQuantum) &&
+                pkSigner.size() != DILITHIUM_PK_SIZE)
+                return telBAD_PUBLIC_KEY;
 
             if (ret = checkSingleSign(
                     idSigner, idAccount, sleAccount, ctx.view.rules(), ctx.j);
@@ -777,6 +781,10 @@ Transactor::checkMultiSign(
     if (!accountSigners)
         return accountSigners.error();
 
+    auto const sleAccountRoot = view.read(keylet::account(id));
+    bool const forceQuantum = view.rules().enabled(featureQuantum) &&
+        sleAccountRoot && sleAccountRoot->isFlag(lsfForceQuantum);
+
     // Get the array of transaction signers.
 
     // Walk the accountSigners performing a variety of checks and see if
@@ -813,6 +821,9 @@ Transactor::checkMultiSign(
         // need to compute the accountID that is associated with the signer's
         // public key.
         auto const spk = txSigner.getFieldVL(sfSigningPubKey);
+
+        if (forceQuantum && !spk.empty() && spk.size() != DILITHIUM_PK_SIZE)
+            return telBAD_PUBLIC_KEY;
 
         if (!(flags & tapDRY_RUN) && !publicKeyType(makeSlice(spk)))
         {
